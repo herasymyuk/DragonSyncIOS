@@ -24,11 +24,11 @@ class ZMQHandler: ObservableObject {
         
         switch mode {
         case .multicast:
-            setupMulticast(telemetryPort: telemetryPort, statusPort: statusPort)
+            setupMulticast(telemetryPort: 6969, statusPort: statusPort)
         case .zmq:
             setupZMQConnection(host: host, telemetryPort: telemetryPort, statusPort: statusPort)
         case .both:
-            setupMulticast(telemetryPort: telemetryPort, statusPort: statusPort)
+            setupMulticast(telemetryPort: 6969, statusPort: statusPort)
             setupZMQConnection(host: host, telemetryPort: telemetryPort, statusPort: statusPort)
         }
     }

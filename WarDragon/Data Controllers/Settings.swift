@@ -29,14 +29,21 @@ class Settings: ObservableObject {
     static let shared = Settings()
     
     @AppStorage("connectionMode") private(set) var connectionMode: ConnectionMode = .multicast
-    @AppStorage("zmqHost") private(set) var zmqHost: String = "ZMQ HOST (127.0.0.1)"
+    @AppStorage("zmqHost") private(set) var zmqHost: String = "localhost"
     @AppStorage("notificationsEnabled") private(set) var notificationsEnabled = true
     @AppStorage("keepScreenOn") private(set) var keepScreenOn = true
-    @AppStorage("telemetryPort") private(set) var telemetryPort: Int = 4224
-    @AppStorage("statusPort") private(set) var statusPort: Int = 4225
     @AppStorage("isListening") private(set) var isListening = false
     
     private init() {}
+    
+    // Dynamic ports based on the mode
+    var telemetryPort: Int {
+        connectionMode == .multicast ? 6969 : 4224
+    }
+    
+    var statusPort: Int {
+        connectionMode == .multicast ? 4225 : 4225
+    }
     
     func updateConnection(mode: ConnectionMode, host: String? = nil) {
         if let host = host {

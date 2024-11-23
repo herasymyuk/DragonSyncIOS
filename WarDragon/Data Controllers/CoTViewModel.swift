@@ -14,7 +14,7 @@ class CoTViewModel: ObservableObject {
     @Published var parsedMessages: [CoTMessage] = []
     private var cotListener: NWListener?
     private var statusListener: NWListener?
-    private let cotPort: UInt16 = 4224
+    private let cotPort: UInt16 = 6969
     private let statusPort: UInt16 = 4225
     private let listenerQueue = DispatchQueue(label: "CoTListenerQueue")
     private var statusViewModel = StatusViewModel()
