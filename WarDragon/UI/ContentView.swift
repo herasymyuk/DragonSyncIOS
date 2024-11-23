@@ -6,11 +6,14 @@
 //
 
 import SwiftUI
+import Network
+import UserNotifications
 
 struct ContentView: View {
     @StateObject private var statusViewModel = StatusViewModel()
     @StateObject private var cotViewModel: CoTViewModel
-    @State private var isListening = false
+    @StateObject private var zmqHandler = ZMQHandler()
+    @StateObject private var settings = Settings.shared
     @State private var showAlert = false
     @State private var latestMessage: CoTViewModel.CoTMessage?
     @State private var selectedTab = 0
@@ -30,8 +33,8 @@ struct ContentView: View {
                             MessageRow(message: item, cotViewModel: cotViewModel)
                         }
                         .listStyle(.inset)
-                        .onChange(of: cotViewModel.parsedMessages) { _, messages in
-                            if let latest = messages.last {
+                        .onChange(of: cotViewModel.parsedMessages) {
+                            if let latest = cotViewModel.parsedMessages.last {
                                 latestMessage = latest
                                 showAlert = false
                                 withAnimation {
@@ -40,17 +43,6 @@ struct ContentView: View {
                             }
                         }
                     }
-                    
-                    Button(isListening ? "Stop Listening" : "Start Listening") {
-                        isListening.toggle()
-                        if isListening {
-                            cotViewModel.startListening()
-                        } else {
-                            cotViewModel.stopListening()
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .padding()
                 }
                 .navigationTitle("DragonLink")
                 .navigationBarTitleDisplayMode(.large)
@@ -89,6 +81,44 @@ struct ContentView: View {
                 Label("Status", systemImage: "server.rack")
             }
             .tag(1)
+            
+            NavigationStack {
+                SettingsView(zmqHandler: zmqHandler)
+            }
+            .tabItem {
+                Label("Settings", systemImage: "gear")
+            }
+            .tag(2)
+        }
+        .onChange(of: settings.isListening) {
+            if settings.isListening {
+                zmqHandler.connect(
+                    mode: settings.connectionMode,
+                    host: settings.zmqHost,
+                    telemetryPort: UInt16(settings.telemetryPort),
+                    statusPort: UInt16(settings.statusPort)
+                )
+                zmqHandler.startReceiving(
+                    onTelemetryMessage: { message in
+                        cotViewModel.handleZMQMessage(message)
+                    },
+                    onStatusMessage: { message in
+                        statusViewModel.handleStatusMessage(message)
+                    }
+                )
+            } else {
+                zmqHandler.disconnect()
+            }
+        }
+        .onChange(of: settings.connectionMode) {
+            if settings.isListening {
+                zmqHandler.connect(
+                    mode: settings.connectionMode,
+                    host: settings.zmqHost,
+                    telemetryPort: UInt16(settings.telemetryPort),
+                    statusPort: UInt16(settings.statusPort)
+                )
+            }
         }
     }
 }

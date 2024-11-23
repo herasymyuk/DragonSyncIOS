@@ -208,6 +208,53 @@ class CoTViewModel: ObservableObject {
         let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
         UNUserNotificationCenter.current().add(request)
     }
+    
+    func handleZMQMessage(_ message: String) {
+            guard let data = message.data(using: .utf8) else { return }
+            
+            // Check if it's XML first (CoT format)
+            if message.trimmingCharacters(in: .whitespacesAndNewlines).starts(with: "<") {
+                let parser = XMLParser(data: data)
+                let cotParserDelegate = CoTMessageParser()
+                parser.delegate = cotParserDelegate
+                
+                if parser.parse(), let parsedMessage = cotParserDelegate.cotMessage {
+                    DispatchQueue.main.async {
+                        self.parsedMessages.append(parsedMessage)
+                        self.sendNotification(for: parsedMessage)
+                    }
+                }
+            } else {
+                // Try JSON parsing (ESP32 format)
+                do {
+                    if let jsonArray = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
+                        for jsonData in jsonArray {
+                            if jsonData["Basic ID"] != nil {
+                                let parser = CoTMessageParser()
+                                if let parsedMessage = parser.parseESP32Message(jsonData) {
+                                    DispatchQueue.main.async {
+                                        self.parsedMessages.append(parsedMessage)
+                                        self.sendNotification(for: parsedMessage)
+                                    }
+                                }
+                            }
+                        }
+                    } else if let jsonData = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                        if jsonData["Basic ID"] != nil {
+                            let parser = CoTMessageParser()
+                            if let parsedMessage = parser.parseESP32Message(jsonData) {
+                                DispatchQueue.main.async {
+                                    self.parsedMessages.append(parsedMessage)
+                                    self.sendNotification(for: parsedMessage)
+                                }
+                            }
+                        }
+                    }
+                } catch {
+                    print("JSON Parsing error: \(error)")
+                }
+            }
+        }
 
     func stopListening() {
         cotListener?.cancel()
