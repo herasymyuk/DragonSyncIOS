@@ -143,6 +143,17 @@ class Settings: ObservableObject {
         }
     }
     @AppStorage("enableProximityWarnings") var enableProximityWarnings = true
+    @AppStorage("serialConsoleEnabled") var serialConsoleEnabled = false
+    @AppStorage("serialConsoleMulticastPort") var serialConsoleMulticastPort: Int = 6970 {
+        didSet {
+            objectWillChange.send()
+        }
+    }
+    @AppStorage("serialConsoleZMQPort") var serialConsoleZMQPort: Int = 4227 {
+        didSet {
+            objectWillChange.send()
+        }
+    }
 
     //MARK: - Connection
 

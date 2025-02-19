@@ -112,8 +112,7 @@ struct SettingsView: View {
                     get: { settings.notificationsEnabled },
                     set: { settings.updatePreferences(notifications: $0, screenOn: settings.keepScreenOn) }
                 ))
-                
-                Toggle("Auto Spoof Detection", isOn: .init(
+                Toggle("Spoof Detection", isOn: .init(
                     get: { settings.spoofDetectionEnabled },
                     set: { settings.spoofDetectionEnabled = $0 }
                 ))
@@ -122,6 +121,7 @@ struct SettingsView: View {
                     get: { settings.keepScreenOn },
                     set: { settings.updatePreferences(notifications: settings.notificationsEnabled, screenOn: $0) }
                 ))
+                Toggle("Serial Console", isOn: $settings.serialConsoleEnabled)
             }
             
             Section("Warning Thresholds") {
@@ -233,6 +233,33 @@ struct SettingsView: View {
                         Text(verbatim: String(settings.zmqStatusPort))
                             .foregroundStyle(.secondary)
                             .monospacedDigit()
+                    }
+                    Section("Serial Console Ports") {
+                        HStack {
+                            Text("Multicast")
+                            Spacer()
+                            TextField("Port", text: .init(
+                                get: { String(settings.serialConsoleMulticastPort) },
+                                set: { if let port = Int($0) { settings.serialConsoleMulticastPort = port } }
+                            ))
+                            .keyboardType(.numberPad)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 100)
+                            .multilineTextAlignment(.trailing)
+                        }
+                        
+                        HStack {
+                            Text("ZMQ")
+                            Spacer()
+                            TextField("Port", text: .init(
+                                get: { String(settings.serialConsoleZMQPort) },
+                                set: { if let port = Int($0) { settings.serialConsoleZMQPort = port } }
+                            ))
+                            .keyboardType(.numberPad)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 100)
+                            .multilineTextAlignment(.trailing)
+                        }
                     }
                     
 //                case .both:

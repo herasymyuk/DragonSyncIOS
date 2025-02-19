@@ -11,6 +11,7 @@ struct StatusListView: View {
     @ObservedObject var statusViewModel: StatusViewModel
     @StateObject private var serviceViewModel = ServiceViewModel()
     @State private var showServiceManagement = false
+    @StateObject private var settings = Settings.shared
     
     var body: some View {
         GeometryReader { geometry in
@@ -31,6 +32,12 @@ struct StatusListView: View {
                     Section {
                         ForEach(statusViewModel.statusMessages) { message in
                             StatusMessageView(message: message)
+                        }
+                    }
+                    Section {
+                        if settings.serialConsoleEnabled {
+                            SerialConsoleView()
+                                .frame(height: 400)
                         }
                     }
                 }
