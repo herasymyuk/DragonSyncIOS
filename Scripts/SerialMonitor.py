@@ -7,7 +7,50 @@ import struct
 import json
 import time
 import traceback
+import os
+import logging
 from datetime import datetime
+from pathlib import Path
+
+# Setup logging
+def setup_logging(log_file=None):
+    logger = logging.getLogger('serial_monitor')
+    logger.setLevel(logging.INFO)
+    
+    # Console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    console_format = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    console_handler.setFormatter(console_format)
+    logger.addHandler(console_handler)
+    
+    # File handler (if specified)
+    if log_file:
+        os.makedirs(os.path.dirname(log_file), exist_ok=True)
+        file_handler = logging.FileHandler(log_file)
+        file_handler.setLevel(logging.INFO)
+        file_format = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+        file_handler.setFormatter(file_format)
+        logger.addHandler(file_handler)
+    
+    return logger
+
+def wait_for_device(device_path, logger, timeout=None):
+    """Wait for the device to become available with optional timeout"""
+    start_time = time.time()
+    logger.info(f"Waiting for device: {device_path}")
+    
+    while True:
+        if Path(device_path).exists():
+            logger.info(f"Device {device_path} found")
+            return True
+        
+        if timeout and (time.time() - start_time > timeout):
+            logger.error(f"Timeout waiting for device: {device_path}")
+            return False
+        
+        logger.debug(f"Device {device_path} not found, waiting...")
+        time.sleep(1)
 
 def setup_zmq_publisher(host, port):
     context = zmq.Context()
@@ -38,15 +81,11 @@ def setup_multicast_socket(group, port):
         mreq = struct.pack('4sL', group_bin, socket.INADDR_ANY)
         sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
         
-        print(f"Multicast Socket Details:")
-        print(f"Group: {group}")
-        print(f"Port: {port}")
-        
         return sock
     except Exception as e:
-        print(f"Multicast socket setup error: {e}")
         traceback.print_exc()
         return None
+
 def main():
     parser = argparse.ArgumentParser(description='Serial Monitor Service')
     parser.add_argument('--zmq', action='store_true', help='Enable ZMQ output')
@@ -57,18 +96,28 @@ def main():
     parser.add_argument('--multicast-port', type=int, default=6970, help='Multicast port')
     parser.add_argument('--device', default='/dev/ttyUSB1', help='Serial device')
     parser.add_argument('--baud', type=int, default=115200, help='Baud rate')
+    parser.add_argument('--log-file', default='/var/log/serial_monitor.log', help='Log file path')
+    parser.add_argument('--device-timeout', type=int, default=0, help='Timeout in seconds for device waiting (0 = wait forever)')
     args = parser.parse_args()
 
-    print(f"Opening serial port {args.device} at {args.baud} baud...")
+    # Setup logging
+    logger = setup_logging(args.log_file)
+    logger.info("Serial Monitor Service starting...")
+
+    # Wait for device to be available
+    timeout = args.device_timeout if args.device_timeout > 0 else None
+    if not wait_for_device(args.device, logger, timeout):
+        logger.error("Device not found within timeout period. Exiting.")
+        return 1
 
     zmq_socket = None
     multicast_socket = None
 
     if args.zmq:
-        print(f"Setting up ZMQ publisher on {args.zmq_host}:{args.zmq_port}")
+        logger.info(f"Setting up ZMQ publisher on {args.zmq_host}:{args.zmq_port}")
         zmq_socket = setup_zmq_publisher(args.zmq_host, args.zmq_port)
     if args.multicast:
-        print(f"Setting up multicast on group {args.multicast_group}:{args.multicast_port}")
+        logger.info(f"Setting up multicast on group {args.multicast_group}:{args.multicast_port}")
         multicast_socket = setup_multicast_socket(args.multicast_group, args.multicast_port)
 
     try:
@@ -84,7 +133,7 @@ def main():
             dsrdtr=False
         )
         
-        print(f"Serial port opened successfully: {ser.name}")
+        logger.info(f"Serial port opened successfully: {ser.name}")
         
         while True:
             try:
@@ -94,7 +143,7 @@ def main():
                         line_decoded = line.decode('utf-8', errors='ignore').strip()
                         if line_decoded:  # Only process non-empty lines
                             timestamp = datetime.now().isoformat()
-                            print(f"Read: {line_decoded}")
+                            logger.info(f"Read: {line_decoded}")
                             
                             message = {
                                 "type": "serial",
@@ -103,47 +152,65 @@ def main():
                             }
                             
                             if args.zmq and zmq_socket:
-                                print(f"Sending via ZMQ: {message}")
+                                logger.debug(f"Sending via ZMQ: {message}")
                                 zmq_socket.send_json(message)
                             
                             if args.multicast and multicast_socket:
                                 try:
                                     message_json = json.dumps(message)
-#                                   print(f"Attempting Multicast Send:")
-#                                   print(f"Group: {args.multicast_group}")
-#                                   print(f"Port: {args.multicast_port}")
-#                                   print(f"Message: {message_json}")
-                                    
                                     bytes_sent = multicast_socket.sendto(
                                         message_json.encode(),
                                         (args.multicast_group, args.multicast_port)
                                     )
-                                    print(f"Multicast sent {bytes_sent} bytes")
+                                    logger.debug(f"Multicast sent {bytes_sent} bytes")
                                 except Exception as multicast_error:
-                                    print(f"Multicast send error: {multicast_error}")
+                                    logger.error(f"Multicast send error: {multicast_error}")
                                     traceback.print_exc()
                     except UnicodeDecodeError as e:
-                        print(f"Error decoding line: {e}")
+                        logger.error(f"Error decoding line: {e}")
                         continue
             except serial.SerialException as e:
-                print(f"Serial error: {e}")
-                break
+                logger.error(f"Serial error: {e}")
+                # Try to reconnect after error
+                logger.info("Attempting to reconnect in 5 seconds...")
+                time.sleep(5)
+                if not wait_for_device(args.device, logger, 10):
+                    logger.error("Failed to reconnect to device. Exiting.")
+                    break
+                try:
+                    ser = serial.Serial(
+                        port=args.device,
+                        baudrate=args.baud,
+                        bytesize=serial.EIGHTBITS,
+                        parity=serial.PARITY_NONE,
+                        stopbits=serial.STOPBITS_ONE,
+                        timeout=1,
+                        xonxoff=False,
+                        rtscts=False,
+                        dsrdtr=False
+                    )
+                    logger.info(f"Reconnected to serial port: {ser.name}")
+                except serial.SerialException as e:
+                    logger.error(f"Failed to reopen serial port: {e}")
+                    break
 
     except serial.SerialException as e:
-        print(f"Error opening serial port: {e}")
+        logger.error(f"Error opening serial port: {e}")
     except KeyboardInterrupt:
-        print("\nExiting...")
+        logger.info("Exiting by user request (KeyboardInterrupt)...")
     finally:
-        print("Cleaning up...")
+        logger.info("Cleaning up resources...")
         if 'ser' in locals() and ser.is_open:
             ser.close()
-            print("Serial port closed")
+            logger.info("Serial port closed")
         if zmq_socket:
             zmq_socket.close()
-            print("ZMQ socket closed")
+            logger.info("ZMQ socket closed")
         if multicast_socket:
-            multicast_socket.close()
-            print("Multicast socket closed")
+            multicast_socket.close() 
+            logger.info("Multicast socket closed")
+
+    return 0
 
 if __name__ == '__main__':
-    main()
+    exit(main())
