@@ -16,11 +16,32 @@ class SerialConsoleViewModel: ObservableObject {
     private let listenerQueue = DispatchQueue(label: "com.wardragon.serial")
     let mcPort = Settings.shared.serialConsoleMulticastPort
     let zmqPort = Settings.shared.serialConsoleZMQPort
+    private var isSubscribed = false
     
     struct SerialData: Codable {
         let type: String
         let timestamp: String
         let data: String
+    }
+    
+    // Notification name for serial messages
+    static let serialMessageNotification = Notification.Name("SerialMessageReceived")
+    
+    // Subscribe to messages from the main connection
+    func startListening() {
+        if isSubscribed {
+            return
+        }
+        
+        // Subscribe to notifications for serial messages
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleSerialMessageNotification),
+            name: Self.serialMessageNotification,
+            object: nil
+        )
+        
+        isSubscribed = true
     }
     
     func startListening(port: UInt16) {
@@ -197,6 +218,37 @@ class SerialConsoleViewModel: ObservableObject {
             }
         }
     }
+    
+    @objc private func handleSerialMessageNotification(_ notification: Notification) {
+        guard let message = notification.object as? String else { return }
+        processSerialMessage(message)
+    }
+    
+    private func processSerialMessage(_ message: String) {
+        DispatchQueue.main.async {
+            if let data = message.data(using: .utf8),
+               let serialData = try? JSONDecoder().decode(SerialData.self, from: data) {
+                self.messages.append(
+                    SerialConsoleView.SerialMessage(
+                        timestamp: Date(),
+                        content: serialData.data,
+                        type: .output
+                    )
+                )
+            } else {
+                let trimmedContent = message.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmedContent.isEmpty {
+                    self.messages.append(
+                        SerialConsoleView.SerialMessage(
+                            timestamp: Date(),
+                            content: trimmedContent,
+                            type: .output
+                        )
+                    )
+                }
+            }
+        }
+    }
 
     
     func stopListening() {
@@ -204,5 +256,7 @@ class SerialConsoleViewModel: ObservableObject {
         cotListener = nil
         zmqHandler?.disconnect()
         zmqHandler = nil
+        NotificationCenter.default.removeObserver(self, name: Self.serialMessageNotification, object: nil)
+        isSubscribed = false
     }
 }

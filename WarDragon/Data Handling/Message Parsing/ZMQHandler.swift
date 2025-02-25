@@ -11,6 +11,7 @@ import SwiftyZeroMQ5
 class ZMQHandler: ObservableObject {
     //MARK: - ZMQ Connection
     @Published var messageFormat: MessageFormat = .bluetooth 
+    private var serialSocket: SwiftyZeroMQ.Socket?
     
     @Published var isConnected = false {
         didSet {
@@ -141,6 +142,18 @@ class ZMQHandler: ObservableObject {
             try statusSocket?.connect("tcp://\(host):\(zmqStatusPort)")
             try poller?.register(socket: statusSocket!, flags: .pollIn)
             
+            // Add listener for serial messages
+            if Settings.shared.serialConsoleEnabled {
+                let serialPort = UInt16(Settings.shared.serialConsoleZMQPort)
+                
+                // Create special serial socket
+                serialSocket = try context?.socket(.subscribe)
+                try serialSocket?.setSubscribe("")
+                try configureSocket(serialSocket!)
+                try serialSocket?.connect("tcp://\(host):\(serialPort)")
+                try poller?.register(socket: serialSocket!, flags: .pollIn)
+            }
+            
             // Start polling on background queue
             pollingQueue = DispatchQueue(label: "com.wardragon.zmq.polling")
             
@@ -225,6 +238,12 @@ class ZMQHandler: ObservableObject {
                                         if let xmlMessage = self.convertStatusToXML(jsonString) {
                                             onStatus(xmlMessage)
                                         }
+                                    } else if socket === self.serialSocket && Settings.shared.serialConsoleEnabled {
+                                        // This is a serial message - post notification directly
+                                        NotificationCenter.default.post(
+                                            name: Notification.Name("SerialMessageReceived"),
+                                            object: jsonString
+                                        )
                                     }
                                 }
                             }
@@ -688,7 +707,7 @@ class ZMQHandler: ObservableObject {
     //MARK: - Cleanup
     
     func disconnect() {
-        print("ZMQ: Disconnecting...")
+        print("ZMQ Handler: Disconnecting...")
         shouldContinueRunning = false
         
         do {
@@ -704,7 +723,7 @@ class ZMQHandler: ObservableObject {
         context = nil
         poller = nil
         isConnected = false
-        print("ZMQ: Disconnected")
+        print("ZMQ Handler: Disconnected")
     }
     
 }

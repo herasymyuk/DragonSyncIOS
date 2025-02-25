@@ -12,6 +12,7 @@ import UserNotifications
 struct ContentView: View {
     @StateObject private var statusViewModel = StatusViewModel()
     @StateObject private var spectrumViewModel = SpectrumData.SpectrumViewModel()
+    @StateObject private var serialViewModel = SerialConsoleViewModel()
     @StateObject private var cotViewModel: CoTViewModel
     @StateObject private var settings = Settings.shared
     @State private var showAlert = false
@@ -141,6 +142,17 @@ struct ContentView: View {
                 cotViewModel.stopListening()
             }
         }
+        .onChange(of: settings.serialConsoleEnabled) {
+            if settings.serialConsoleEnabled {
+                if Settings.shared.connectionMode == .multicast {
+                    serialViewModel.startListening(port: UInt16(Settings.shared.serialConsoleMulticastPort))
+                } else {
+                    serialViewModel.startListening(port: UInt16(Settings.shared.serialConsoleZMQPort))
+                }
+            } else {
+                serialViewModel.stopListening()
+            }
+        }
         .onChange(of: selectedTab) { oldValue, newValue in
             if newValue != 3 { // Spectrum tab
                 spectrumViewModel.stopListening()
@@ -149,10 +161,11 @@ struct ContentView: View {
                 spectrumViewModel.startListening(port: port)
             }
         }
-        .onChange(of: settings.connectionMode) {
-            if settings.isListening {
-                // Handle switch when enabled, for now just do not allow
-            }
-        }
+        
+//        .onChange(of: settings.connectionMode) {
+//            if settings.isListening {
+//                // Handle switch when enabled, for now just do not allow
+//            }
+//        }
     }
 }

@@ -121,7 +121,11 @@ struct SettingsView: View {
                     get: { settings.keepScreenOn },
                     set: { settings.updatePreferences(notifications: settings.notificationsEnabled, screenOn: $0) }
                 ))
-                Toggle("Serial Console", isOn: $settings.serialConsoleEnabled)
+                Toggle("Serial Console", isOn: .init(
+                    get: { settings.serialConsoleEnabled },
+                    set: { settings.spoofDetectionEnabled = $0 }
+                ))
+                
             }
             
             Section("Warning Thresholds") {

@@ -125,18 +125,6 @@ struct SerialConsoleView: View {
                     }
                 }
             }
-            .onAppear {
-                // Start listening for serial data when view appears
-                if Settings.shared.connectionMode == .multicast {
-                    viewModel.startListening(port: UInt16(Settings.shared.serialConsoleMulticastPort))
-                } else {
-                    viewModel.startListening(port: UInt16(Settings.shared.serialConsoleZMQPort))
-                }
-            }
-            .onDisappear {
-                // Stop listening when view disappears
-                viewModel.stopListening()
-            }
         }
     }
     

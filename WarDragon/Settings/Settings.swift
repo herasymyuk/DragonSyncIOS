@@ -143,7 +143,12 @@ class Settings: ObservableObject {
         }
     }
     @AppStorage("enableProximityWarnings") var enableProximityWarnings = true
-    @AppStorage("serialConsoleEnabled") var serialConsoleEnabled = false
+    
+    @AppStorage("serialConsoleEnabled") var serialConsoleEnabled = false {
+        didSet {
+            objectWillChange.send()
+        }
+    }
     @AppStorage("serialConsoleMulticastPort") var serialConsoleMulticastPort: Int = 6970 {
         didSet {
             objectWillChange.send()
