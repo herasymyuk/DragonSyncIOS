@@ -15,9 +15,9 @@ PATTERN_BITS = np.unpackbits(np.array(list(PATTERN_HEX.to_bytes(4, 'big')), dtyp
 ZMQ_ADDRESS = "tcp://127.0.0.1:5556"
 STATION_LAT = 50.4501
 STATION_LON = 30.5234
-DRIVER = "plutosdr"  # 🔧 Ось тут вказано драйвер
+DRIVER = "plutosdr"  
 
-# === ZMQ INIT === #
+# === ZMQ INIT ===#
 ctx = zmq.Context()
 sock = ctx.socket(zmq.PUB)
 sock.connect(ZMQ_ADDRESS)
